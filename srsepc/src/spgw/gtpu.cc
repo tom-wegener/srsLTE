@@ -29,6 +29,7 @@
 #include <linux/if_tun.h>
 #include <linux/ip.h>
 #include <netinet/in.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 
@@ -290,10 +291,24 @@ void spgw::gtpu::send_s1u_pdu(srslte::gtp_fteid_t enb_fteid, srslte::byte_buffer
   header.length       = msg->N_bytes;
   header.teid         = enb_fteid.teid;
 
+  // set a flag for tcp or udp
+  printf("## gtpu.cc ##################\n");
+  printf("msg-type is atm %i \n", header.message_type);
+  if (msg->msg[9] == 1) {
+    printf("IP Protocol Type is ICMP \n");
+    header.message_type = 71;
+  } else if (msg->msg[9] == 6) {
+    printf("IP Protocol Type is TCP \n");
+    header.message_type = 72;
+  } else if (msg->msg[9] == 17) {
+    printf("IP Protocol Type is UDP \n");
+    header.message_type = 73;
+  }
+  printf("## end ###################\n");
+
   m_gtpu_log->debug("User plane tunnel found SGi PDU. Forwarding packet to S1-U.\n");
   m_gtpu_log->debug("eNB F-TEID -- eNB IP %s, eNB TEID 0x%x.\n", inet_ntoa(enb_addr.sin_addr), enb_fteid.teid);
 
-  // Write header into packet
   int n;
   if (!srslte::gtpu_write_header(&header, msg, m_gtpu_log)) {
     m_gtpu_log->error("Error writing GTP-U header on PDU\n");

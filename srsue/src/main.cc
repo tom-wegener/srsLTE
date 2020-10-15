@@ -37,6 +37,8 @@
 #include <stdlib.h>
 #include <string>
 #include <unistd.h>
+#include <zmq.hpp>
+
 
 extern bool simulate_rlf;
 
@@ -83,6 +85,7 @@ static int parse_args(all_args_t* args, int argc, char* argv[])
 
     ("rf.device_name", bpo::value<string>(&args->rf.device_name)->default_value("auto"), "Front-end device name")
     ("rf.device_args", bpo::value<string>(&args->rf.device_args)->default_value("auto"), "Front-end device arguments")
+    ("rf.device_args_2", bpo::value<string>(&args->rf.device_args_2)->default_value("nothing"), "Front-end device arguments")
     ("rf.time_adv_nsamples", bpo::value<string>(&args->rf.time_adv_nsamples)->default_value("auto"), "Transmission time advance")
     ("rf.continuous_tx", bpo::value<string>(&args->rf.continuous_tx)->default_value("auto"), "Transmit samples continuously to the radio or on bursts (auto/yes/no). Default is auto (yes for UHD, no for rest)")
 
@@ -635,7 +638,21 @@ int main(int argc, char* argv[])
     ue.start_plot();
   }
 
-  while (running) {
+  zmq::context_t context (1);
+  zmq::socket_t second_rx_socket (context, ZMQ_PULL);
+  zmq::socket_t second_tx_socket (context, ZMQ_PUSH);
+  second_rx_socket.bind ("tcp://*:2005");
+  second_tx_socket.bind ("tcp://*:2004");
+  cout << "Second Device attached, preparing to listen" << endl;
+
+  while (running){
+    zmq::message_t request;
+
+    //  Wait for next request from client
+    second_rx_socket.recv (&request);
+    std::cout << "Received Package" << std::endl;
+
+    //  Do some 'work'
     sleep(1);
   }
 

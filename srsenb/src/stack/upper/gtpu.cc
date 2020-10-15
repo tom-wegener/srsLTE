@@ -21,12 +21,13 @@
 #include "srslte/upper/gtpu.h"
 #include "srsenb/hdr/stack/upper/gtpu.h"
 #include "srslte/common/network_utils.h"
-#include <errno.h>
+#include <cerrno>
 #include <fcntl.h>
 #include <linux/ip.h>
-#include <stdio.h>
+#include <cstdio>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <zmq.hpp>
 
 using namespace srslte;
 namespace srsenb {
@@ -200,12 +201,45 @@ void gtpu::handle_gtpu_s1u_rx_packet(srslte::unique_byte_buffer_t pdu, const soc
     return;
   }
 
+  printf("## gtpu.cc #######################################\n");
+  if (header.message_type == 71) {
+    printf("IP Protocol Type is ICMP \n");
+  } else if (header.message_type == 72) {
+    printf("IP Protocol Type is TCP \n");
+  } else if (header.message_type == 73) {
+    printf("IP Protocol Type is UDP \n");
+  } else {
+    printf("Message Type is %u and neither icmp, tcp or udp.", header.message_type );
+  }
+  printf("## end ###########################################\n");
+
   switch (header.message_type) {
     case GTPU_MSG_ECHO_REQUEST:
       // Echo request - send response
       echo_response(addr.sin_addr.s_addr, addr.sin_port, header.seq_number);
       break;
-    case GTPU_MSG_DATA_PDU: {
+    case GTPU_MSG_CUSTOM_TCP_MARK:
+      goto standard_message;
+    case GTPU_MSG_CUSTOM_UDP_MARK: {
+      zmq::context_t context (1);
+      zmq::socket_t second_rx_socket (context, ZMQ_PULL);
+      zmq::socket_t second_tx_socket (context, ZMQ_PUSH);
+      second_rx_socket.connect ("tcp://localhost:2004");
+      second_tx_socket.connect ("tcp://localhost:2005");
+
+      zmq::message_t reply (pdu->N_bytes);
+      memcpy (reply.data (), pdu->msg, pdu->N_bytes);
+      second_tx_socket.send (reply);
+
+      printf("## start #########################################\n");
+      printf("##           UDP-Message send                   ##\n");
+      printf("## end ###########################################\n");
+    } break;
+    case GTPU_MSG_CUSTOM_ICMP_MARK:
+      goto standard_message;
+    case GTPU_MSG_DATA_PDU:
+    standard_message:
+    {
       uint16_t rnti = 0;
       uint16_t lcid = 0;
       teidin_to_rntilcid(header.teid, &rnti, &lcid);
